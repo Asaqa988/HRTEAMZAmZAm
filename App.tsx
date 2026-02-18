@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Users,
@@ -13,6 +13,7 @@ import {
   ArrowUpRight,
   Briefcase,
   TrendingUp,
+
   Clock,
   Sparkles,
   Loader2,
@@ -20,13 +21,14 @@ import {
   Send,
   Languages,
   HelpCircle,
-  // Fix: Added missing AlertCircle import used on line 222
   AlertCircle,
-  Lock
+  Lock,
+  Mail,
+  Phone
 } from 'lucide-react';
 import { LinkedInProfile, SearchParams } from './types';
-import { startScrapingRun, pollRunStatus, getRunResults } from './services/apifyService';
-import { getMarketTrends, generateResume, generateJobOffer } from './services/geminiService';
+import { startScrapingRun, pollRunStatus, getRunResults, getMockProfiles, enrichProfiles, EnrichedProfile } from './services/apifyService';
+import { generateResume, generateJobOffer } from './services/geminiService';
 import ProfileCard from './components/ProfileCard';
 import InsightsPanel from './components/InsightsPanel';
 import ResumeModal from './components/ResumeModal';
@@ -34,23 +36,97 @@ import JobOfferModal from './components/JobOfferModal';
 import CVParserView from './components/CVParserView';
 import InterviewQuestionsView from './components/InterviewQuestionsView';
 import KPIManagement from './components/KPIManagement';
+import EnrichedProfileCard from './components/EnrichedProfileCard';
+import EnrichedProfileModal from './components/EnrichedProfileModal';
 
-type View = 'dashboard' | 'find-candidate' | 'employees' | 'payroll' | 'settings' | 'cv-parser' | 'interview-questions' | 'kpi-management';
+type View = 'dashboard' | 'find-candidate' | 'employees' | 'payroll' | 'settings' | 'cv-parser' | 'interview-questions' | 'kpi-management' | 'talent-pools' | 'ai-analysis';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Existing Search States
-  const [params, setParams] = useState<SearchParams>({
-    title: 'HR',
-    location: 'Jordan',
-    yearsOfExperience: '5-10',
-    limit: 20,
-    actorId: 'demo-actor'
+  // Enriched Profiles State (Persisted)
+  const [enrichedProfiles, setEnrichedProfiles] = useState<EnrichedProfile[]>(() => {
+    const saved = localStorage.getItem('zamzam_enriched_profiles');
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse enriched profiles", e);
+      return [];
+    }
   });
-  const [results, setResults] = useState<LinkedInProfile[]>([]);
-  const [marketInsights, setMarketInsights] = useState<string>('');
+
+  const [selectedEnrichedProfile, setSelectedEnrichedProfile] = useState<EnrichedProfile | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('zamzam_enriched_profiles', JSON.stringify(enrichedProfiles));
+  }, [enrichedProfiles]);
+
+  const handleEnrichProfiles = async (profilesToEnrich: LinkedInProfile[]) => {
+    // Deduplicate from existing enriched based on URL
+    const existingUrls = new Set(enrichedProfiles.map(p => p.linkedinUrl));
+    const newProfiles = profilesToEnrich.filter(p => p.profileUrl && !existingUrls.has(p.profileUrl));
+
+    if (newProfiles.length === 0) {
+      alert("All selected profiles are already enriched or have no URL.");
+      setActiveView('ai-analysis');
+      return;
+    }
+
+    if (confirm(`This will use Apify credits to enrich ${newProfiles.length} new profiles. Continue?`)) {
+      setIsEnriching(true);
+      setStatus(`Enriching ${newProfiles.length} profiles (Batching 5 at a time)...`);
+      try {
+        const urls = newProfiles.map(p => p.profileUrl).filter(Boolean) as string[];
+        const newEnrichedData = await enrichProfiles(urls);
+        setEnrichedProfiles(prev => [...newEnrichedData, ...prev]);
+        setActiveView('ai-analysis');
+        setStatus('');
+      } catch (err: any) {
+        setError(err.message || "Enrichment failed.");
+      } finally {
+        setIsEnriching(false);
+      }
+    }
+  };
+
+  // Search State with Advanced Fields (Lazy Init from LocalStorage)
+  const [params, setParams] = useState<SearchParams>(() => {
+    const saved = localStorage.getItem('zamzam_current_params');
+    return saved ? JSON.parse(saved) : {
+      title: 'HR',
+      location: 'Jordan',
+      yearsOfExperience: '5-10',
+      limit: 20,
+      actorId: 'demo-actor',
+      positionLevel: 'Manager',
+      targetIndustry: 'Banking',
+      coreFunction: 'HR',
+      subSpecialization: 'Talent Acquisition',
+      skills: {
+        mandatory: ['Recruitment', 'Negotiation'],
+        preferred: ['LinkedIn Recruiter'],
+        niceToHave: []
+      },
+      companyMapping: {
+        target: [],
+        competitor: [],
+        excluded: []
+      },
+      geographicFlexibility: false,
+      keywordsIncludes: '',
+      keywordsExcludes: '',
+      education: '',
+      currentEmployer: ''
+    };
+  });
+
+  const [results, setResults] = useState<LinkedInProfile[]>(() => {
+    const saved = localStorage.getItem('zamzam_current_results');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -69,35 +145,135 @@ const App: React.FC = () => {
   const [offerLoading, setOfferLoading] = useState(false);
   const [offerProfileName, setOfferProfileName] = useState('');
 
-  const lastTrendFetch = useRef<string>('');
-  const trendFetchTimeoutRef = useRef<number | null>(null);
+  // Saved Searches / Talent Pools (Lazy Init from LocalStorage)
+  const [savedSearches, setSavedSearches] = useState<{ id: string; title: string; profiles: LinkedInProfile[] }[]>(() => {
+    const saved = localStorage.getItem('zamzam_saved_searches');
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse saved searches", e);
+      return [];
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState<string>('current');
+  const [poolsViewMode, setPoolsViewMode] = useState<'grid' | 'table'>('grid');
+
+
+  // Persistence Effects (Save Only)
+  useEffect(() => {
+    localStorage.setItem('zamzam_saved_searches', JSON.stringify(savedSearches));
+  }, [savedSearches]);
 
   useEffect(() => {
-    if (activeView === 'find-candidate') {
-      const fetchTrends = async () => {
-        const currentKey = `${params.title}-${params.location}`;
-        if (lastTrendFetch.current === currentKey) return;
+    localStorage.setItem('zamzam_current_results', JSON.stringify(results));
+  }, [results]);
 
-        try {
-          const trends = await getMarketTrends(params.title, params.location);
-          setMarketInsights(trends);
-          lastTrendFetch.current = currentKey;
-        } catch (err: any) {
-          console.warn("Trend fetch skipped or limited:", err.message);
-          if (err.message.includes("Rate limit")) {
-            setMarketInsights("Market AI is currently on a break due to high usage. Trends will resume shortly.");
-          }
-        }
-      };
+  useEffect(() => {
+    localStorage.setItem('zamzam_current_params', JSON.stringify(params));
+  }, [params]);
 
-      if (trendFetchTimeoutRef.current) window.clearTimeout(trendFetchTimeoutRef.current);
-      trendFetchTimeoutRef.current = window.setTimeout(fetchTrends, 1500); // Higher debounce
 
-      return () => {
-        if (trendFetchTimeoutRef.current) window.clearTimeout(trendFetchTimeoutRef.current);
-      };
-    }
-  }, [activeView, params.title, params.location]);
+  // Helper to update nested state
+  const updateSkill = (type: 'mandatory' | 'preferred' | 'niceToHave', value: string) => {
+    setParams(prev => ({
+      ...prev,
+      skills: {
+        ...prev.skills,
+        [type]: value.split(',').map(s => s.trim())
+      }
+    }));
+  };
+
+  const updateCompany = (type: 'target' | 'competitor' | 'excluded', value: string) => {
+    setParams(prev => ({
+      ...prev,
+      companyMapping: {
+        ...prev.companyMapping,
+        [type]: value.split(',').map(s => s.trim())
+      }
+    }));
+  };
+
+  // ... (startScrapingRun and other existing functions)
+
+  {/* Talent Pools View */ }
+  {
+    activeView === 'talent-pools' && (
+      <div className="p-8 max-w-7xl mx-auto w-full space-y-8 animate-in fade-in duration-500">
+        <header className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-black tracking-tight text-slate-900">Talent Pools</h2>
+            <p className="text-slate-500 font-medium">Manage your saved candidate lists and active pipelines.</p>
+          </div>
+          <button
+            onClick={() => setActiveView('find-candidate')}
+            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+          >
+            <Plus size={16} /> Create New Pool
+          </button>
+        </header>
+
+        {savedSearches.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {savedSearches.map(pool => (
+              <div key={pool.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition-all group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Users size={24} />
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50 px-2 py-1 rounded-lg">
+                      {pool.profiles.length} Candidates
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Delete this talent pool?")) {
+                          setSavedSearches(prev => prev.filter(p => p.id !== pool.id));
+                        }
+                      }}
+                      className="p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+                <h3 className="text-lg font-black text-slate-900">{pool.title}</h3>
+                <p className="text-xs text-slate-500 font-medium mt-1 mb-6">Last updated just now</p>
+
+                <button
+                  onClick={() => {
+                    setActiveView('find-candidate');
+                    setActiveTab(pool.id);
+                  }}
+                  className="w-full py-3 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  View Candidates <ArrowUpRight size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-3xl border border-slate-200 border-dashed">
+            <div className="bg-slate-50 p-6 rounded-full mb-6">
+              <Users size={48} className="opacity-20" />
+            </div>
+            <h3 className="text-xl font-bold uppercase tracking-tighter text-slate-900">No Talent Pools</h3>
+            <p className="text-sm font-medium mt-1 max-w-xs text-center">Start a search and click "Save Results" to create your first talent pool.</p>
+            <button
+              onClick={() => setActiveView('find-candidate')}
+              className="mt-6 text-indigo-600 font-bold text-sm hover:underline"
+            >
+              Go to Candidate Search
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -112,8 +288,8 @@ const App: React.FC = () => {
       let currentStatus = 'RUNNING';
       let pollCount = 0;
 
-      while (currentStatus === 'RUNNING' && pollCount < 3) {
-        setStatus(`Mining profiles matching "${params.title}" in ${params.location}...`);
+      while ((currentStatus === 'RUNNING' || currentStatus === 'READY') && pollCount < 60) {
+        setStatus(`Mining profiles matching "${params.title}" in ${params.location}... (${pollCount}/60s)`);
         await new Promise(resolve => setTimeout(resolve, 1000));
         currentStatus = await pollRunStatus(runId);
         pollCount++;
@@ -122,7 +298,7 @@ const App: React.FC = () => {
       setStatus('Processing with Gemini Intelligence...');
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      const data = await getRunResults(runId);
+      const data = await getRunResults(runId, params.location);
       setResults(data.profiles);
       setStatus('');
     } catch (err: any) {
@@ -168,8 +344,8 @@ const App: React.FC = () => {
     <button
       onClick={() => setActiveView(view)}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${active
-          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
-          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
+        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
         }`}
     >
       <Icon size={20} className={active ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600'} />
@@ -198,6 +374,8 @@ const App: React.FC = () => {
         <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto custom-scrollbar">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" view="dashboard" active={activeView === 'dashboard'} />
           <SidebarItem icon={Sparkles} label="Find Candidate (AI)" view="find-candidate" active={activeView === 'find-candidate'} />
+          <SidebarItem icon={Users} label="Talent Pools (Saved)" view="talent-pools" active={activeView === 'talent-pools'} />
+          <SidebarItem icon={Sparkles} label="AI Analysis (Enriched)" view="ai-analysis" active={activeView === 'ai-analysis'} />
           <SidebarItem icon={Languages} label="CV Parser (AI)" view="cv-parser" active={activeView === 'cv-parser'} />
           <SidebarItem icon={HelpCircle} label="Interview Assistant" view="interview-questions" active={activeView === 'interview-questions'} />
           <div className="py-2 px-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">HR Management</span></div>
@@ -334,87 +512,235 @@ const App: React.FC = () => {
         {activeView === 'find-candidate' && (
           <div className="flex-1 flex overflow-hidden animate-in slide-in-from-right-8 duration-500">
             {/* Inner Sidebar for Search */}
-            <aside className="w-80 bg-white border-r border-slate-200 p-6 flex flex-col overflow-y-auto">
-              <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2">
-                <Filter size={14} /> Search Settings
-              </h2>
-              <form onSubmit={handleSearch} className="space-y-6">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1 uppercase tracking-tighter">Job Title</label>
-                  <input
-                    type="text"
-                    value={params.title}
-                    onChange={e => setParams({ ...params, title: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner"
-                    placeholder="e.g. HR Manager"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1 uppercase tracking-tighter">Location</label>
-                  <input
-                    type="text"
-                    value={params.location}
-                    onChange={e => setParams({ ...params, location: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner"
-                    placeholder="e.g. Jordan"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1 uppercase tracking-tighter">Years of Experience</label>
-                  <select
-                    value={params.yearsOfExperience}
-                    onChange={e => setParams({ ...params, yearsOfExperience: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner appearance-none cursor-pointer"
-                  >
-                    <option value="0-1">0 - 1 years</option>
-                    <option value="1-3">1 - 3 years</option>
-                    <option value="3-5">3 - 5 years</option>
-                    <option value="5-10">5 - 10 years</option>
-                    <option value="10+">10+ years</option>
-                  </select>
-                </div>
-                <button
-                  disabled={loading}
-                  className={`w-full py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-all uppercase tracking-widest text-xs ${loading ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100'
-                    }`}
-                >
-                  {loading ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-                  {loading ? 'Processing...' : 'Run Discovery'}
-                </button>
-              </form>
+            <aside className="w-96 bg-white border-r border-slate-200 flex flex-col overflow-y-auto custom-scrollbar">
+              <div className="p-6">
+                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                  <Filter size={14} /> Advanced Discovery
+                </h2>
+                <form onSubmit={handleSearch} className="space-y-8">
 
-              {marketInsights && (
-                <div className="mt-8 p-6 bg-slate-900 rounded-3xl text-white shadow-xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/20 rounded-full blur-2xl"></div>
-                  <h3 className="text-[10px] font-black text-indigo-300 flex items-center gap-2 mb-3 uppercase tracking-widest">
-                    <TrendingUp size={14} /> Market Insight
-                  </h3>
-                  <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                    {marketInsights}
-                  </p>
-                </div>
-              )}
+                  {/* Consolidated Search Parameters */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-indigo-900 border-b border-indigo-100 pb-2">Search Parameters</h3>
+
+                    {/* 1. Country / Location */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Country / Location</label>
+                      <input
+                        type="text"
+                        value={params.location}
+                        onChange={e => setParams({ ...params, location: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="e.g. Jordan"
+                      />
+                    </div>
+
+                    {/* 2. Job Title */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Job Title</label>
+                      <input
+                        type="text"
+                        value={params.title}
+                        onChange={e => setParams({ ...params, title: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="e.g. HR Manager"
+                      />
+                    </div>
+
+                    {/* 3. Keywords to Include */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Keywords to Include (OR)</label>
+                      <input
+                        type="text"
+                        value={params.keywordsIncludes || ''}
+                        onChange={e => setParams({ ...params, keywordsIncludes: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="e.g. Java OR Python"
+                      />
+                    </div>
+
+                    {/* 4. Keywords to Exclude */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Keywords to Exclude (-)</label>
+                      <input
+                        type="text"
+                        value={params.keywordsExcludes || ''}
+                        onChange={e => setParams({ ...params, keywordsExcludes: e.target.value })}
+                        className="w-full px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500"
+                        placeholder="e.g. Recruiter OR Sales"
+                      />
+                    </div>
+
+                    {/* 5. Education */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Education</label>
+                      <select
+                        value={params.education || ''}
+                        onChange={e => setParams({ ...params, education: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">All Candidates</option>
+                        <option value="Bachelor OR Bachelors OR BSc OR BA OR B.Sc">Bachelor's Degree</option>
+                        <option value="Master OR Masters OR MBA OR MSc OR M.Sc">Master's Degree</option>
+                        <option value="Doctorate OR PhD OR Ph.D OR Doctor">Doctoral Degree</option>
+                      </select>
+                    </div>
+
+                    {/* Other Filters (Collapsable or minimal for now) */}
+                    <div className="pt-4 border-t border-slate-100 grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Current Employer</label>
+                        <input
+                          type="text"
+                          value={params.currentEmployer || ''}
+                          onChange={e => setParams({ ...params, currentEmployer: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Google"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Exp. Years</label>
+                        <select
+                          value={params.yearsOfExperience}
+                          onChange={e => setParams({ ...params, yearsOfExperience: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="0-1">0-1 yrs</option>
+                          <option value="1-3">1-3 yrs</option>
+                          <option value="3-5">3-5 yrs</option>
+                          <option value="5-10">5-10 yrs</option>
+                          <option value="10+">10+ yrs</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1 uppercase tracking-wider">Position Level</label>
+                        <select
+                          value={params.positionLevel}
+                          onChange={e => setParams({ ...params, positionLevel: e.target.value as any })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="Manager">Manager</option>
+                          <option value="Head">Head</option>
+                          <option value="Director">Director</option>
+                          <option value="VP">VP</option>
+                          <option value="C-Level">C-Level</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        checked={params.geographicFlexibility}
+                        onChange={e => setParams({ ...params, geographicFlexibility: e.target.checked })}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Global Exp?</label>
+                    </div>
+
+                  </div>
+
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-all uppercase tracking-widest text-xs shadow-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={18} />
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search size={18} />
+                        Find Candidates
+                      </>
+                    )}
+                  </button>
+                </form>
+
+
+              </div>
             </aside>
 
             {/* Content Feed */}
-            <div className="flex-1 flex flex-col">
-              <div className="p-6 bg-white border-b border-slate-200 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">{results.length} Candidates Found</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Talent Cloud</p>
+            <div className="flex-1 flex flex-col bg-slate-50">
+
+              {/* Tab Bar & Actions */}
+              <div className="px-6 pt-6 pb-0 flex items-center justify-between border-b border-slate-200 bg-white">
+                <div className="flex gap-6 overflow-x-auto">
+                  <button
+                    onClick={() => setActiveTab('current')}
+                    className={`pb-4 text-xs font-bold uppercase tracking-widest border-b-2 transition-all ${activeTab === 'current'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                      }`}
+                  >
+                    Current Search
+                  </button>
+                  {savedSearches.map(search => (
+                    <button
+                      key={search.id}
+                      onClick={() => setActiveTab(search.id)}
+                      className={`pb-4 text-xs font-bold uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 ${activeTab === search.id
+                        ? 'border-indigo-600 text-indigo-600'
+                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                      {search.title}
+                      <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px]">{search.profiles.length}</span>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-                  <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
-                    <LayoutDashboard size={16} />
-                  </button>
-                  <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
-                    <X size={16} />
-                  </button>
+
+                <div className="pb-2 flex items-center gap-2">
+                  {activeTab === 'current' && results.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const title = prompt("Enter a name for this talent pool:", params.title);
+                        if (title) {
+                          setSavedSearches(prev => [
+                            ...prev,
+                            { id: Date.now().toString(), title, profiles: [...results] }
+                          ]);
+                          alert("Results saved to new tab!");
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                    >
+                      <Plus size={14} /> Save Results
+                    </button>
+                  )}
+                  <div className="h-4 w-px bg-slate-200 mx-2"></div>
+                  <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                    <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                      <LayoutDashboard size={14} />
+                    </button>
+                    <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                      <Menu size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Bar */}
+              <div className="px-6 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    {activeTab === 'current' ? results.length : savedSearches.find(s => s.id === activeTab)?.profiles.length || 0} Candidates Found
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {activeTab === 'current' ? 'Global Talent Cloud' : 'Saved Talent Pool'}
+                  </p>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-8">
-                {status ? (
+                {status && activeTab === 'current' ? (
                   <div className="h-full flex flex-col items-center justify-center py-20 text-center animate-pulse">
                     <div className="relative">
                       <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 animate-pulse"></div>
@@ -423,9 +749,9 @@ const App: React.FC = () => {
                     <h3 className="text-xl font-black uppercase tracking-tighter">{status}</h3>
                     <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">Integrating LinkedIn & Gemini Intelligence</p>
                   </div>
-                ) : results.length > 0 ? (
+                ) : (activeTab === 'current' ? results : savedSearches.find(s => s.id === activeTab)?.profiles || []).length > 0 ? (
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {results.map(profile => (
+                    {(activeTab === 'current' ? results : savedSearches.find(s => s.id === activeTab)?.profiles || []).map(profile => (
                       <ProfileCard
                         key={profile.id}
                         profile={profile}
@@ -461,14 +787,171 @@ const App: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  <InsightsPanel selectedProfile={selectedProfile} targetRole={params.title} />
+                  <InsightsPanel selectedProfile={selectedProfile} targetRole={params.title} searchParams={params} />
                 </div>
               </aside>
             )}
           </div>
-        )}
+        )
+        }
+        {/* Talent Pools View */}
+        {activeView === 'talent-pools' && (
+          <div className="p-8 max-w-7xl mx-auto w-full space-y-8 animate-in fade-in duration-500">
+            <header className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight text-slate-900">Talent Pools</h2>
+                <p className="text-slate-500 font-medium">Manage your saved candidate lists and active pipelines.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-white border border-slate-200 p-1 rounded-xl flex gap-1">
+                  <button
+                    onClick={() => setPoolsViewMode('grid')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${poolsViewMode === 'grid' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <LayoutDashboard size={14} /> Grid
+                  </button>
+                  <button
+                    onClick={() => setPoolsViewMode('table')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${poolsViewMode === 'table' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <Menu size={14} /> Table View
+                  </button>
+                </div>
+                <div className="h-6 w-px bg-slate-200"></div>
+                <button
+                  onClick={() => {
+                    // Get all profiles from current view
+                    const profiles = savedSearches.flatMap(p => p.profiles);
+                    handleEnrichProfiles(profiles);
+                  }}
+                  disabled={isEnriching}
+                  className="bg-indigo-900 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-800 transition-colors shadow-lg shadow-indigo-200"
+                >
+                  {isEnriching ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                  Analyze with AI
+                </button>
+                <div className="w-2"></div>
+                <button
+                  onClick={() => setActiveView('find-candidate')}
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                >
+                  <Plus size={16} /> Create New Pool
+                </button>
+              </div>
+            </header>
 
-        {/* CV Parser View */}
+            {savedSearches.length > 0 ? (
+              poolsViewMode === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {savedSearches.map(pool => (
+                    <div key={pool.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition-all group">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                          <Users size={24} />
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50 px-2 py-1 rounded-lg">
+                            {pool.profiles.length} Candidates
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Delete this talent pool?")) {
+                                setSavedSearches(prev => prev.filter(p => p.id !== pool.id));
+                              }
+                            }}
+                            className="p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="text-lg font-black text-slate-900">{pool.title}</h3>
+                      <p className="text-xs text-slate-500 font-medium mt-1 mb-6">Last updated just now</p>
+
+                      <button
+                        onClick={() => {
+                          setActiveView('find-candidate');
+                          setActiveTab(pool.id);
+                        }}
+                        className="w-full py-3 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2"
+                      >
+                        View Candidates <ArrowUpRight size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Candidate Name</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Title / Role</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Experience</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Location</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Source Pool</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {savedSearches.flatMap(pool => pool.profiles.map(p => ({ ...p, poolName: pool.title }))).map((candidate, idx) => (
+                          <tr key={`${candidate.id}-${idx}`} className="hover:bg-indigo-50/50 transition-colors group">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <img src={candidate.profilePicUrl || "https://ui-avatars.com/api/?name=" + candidate.fullName} className="w-8 h-8 rounded-full object-cover" alt="" />
+                                <span className="font-bold text-sm text-slate-900">{candidate.fullName}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-medium text-slate-600 block max-w-[200px] truncate" title={candidate.title}>{candidate.title}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-xs font-bold text-slate-600">
+                                {candidate.yearsOfExperience || 'N/A'} Yrs
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-500">{candidate.location}</td>
+                            <td className="px-6 py-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
+                                {candidate.poolName}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <a
+                                href={candidate.profileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
+                              >
+                                LinkedIn <ArrowUpRight size={12} />
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-3xl border border-slate-200 border-dashed">
+                <div className="bg-slate-50 p-6 rounded-full mb-6">
+                  <Users size={48} className="opacity-20" />
+                </div>
+                <h3 className="text-xl font-bold uppercase tracking-tighter text-slate-900">No Talent Pools</h3>
+                <p className="text-sm font-medium mt-1 max-w-xs text-center">Start a search and click "Save Results" to create your first talent pool.</p>
+                <button
+                  onClick={() => setActiveView('find-candidate')}
+                  className="mt-6 text-indigo-600 font-bold text-sm hover:underline"
+                >
+                  Go to Candidate Search
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {activeView === 'cv-parser' && <CVParserView />}
 
         {/* Interview Questions View */}
@@ -477,20 +960,68 @@ const App: React.FC = () => {
         {/* KPI Management View */}
         {activeView === 'kpi-management' && <KPIManagement />}
 
-        {/* Placeholder Views */}
-        {(activeView === 'employees' || activeView === 'payroll' || activeView === 'settings') && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-20 animate-in fade-in duration-500">
-            <div className="bg-indigo-50 p-12 rounded-[3rem] mb-8">
-              <Briefcase size={64} className="text-indigo-600" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Under Maintenance</h2>
-            <p className="text-slate-500 max-w-sm mt-2">This module is currently being optimized for the Zamzam Exchange HR infrastructure.</p>
-            <button onClick={() => setActiveView('dashboard')} className="mt-8 px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:scale-105 transition-all">
-              Back to Dashboard
-            </button>
+        {/* AI Analysis View */}
+        {activeView === 'ai-analysis' && (
+          <div className="p-8 max-w-full mx-auto w-full space-y-8 animate-in fade-in duration-500">
+            <header className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight text-slate-900">AI Analysis</h2>
+                <p className="text-slate-500 font-medium">Deep insights from enriched LinkedIn profiles (Powered by Apify & Gemini).</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm("Clear all enriched data?")) setEnrichedProfiles([]);
+                }}
+                className="text-red-500 text-xs font-bold uppercase tracking-wider hover:underline"
+              >
+                Clear All Data
+              </button>
+            </header>
+
+            {enrichedProfiles.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {enrichedProfiles.map((profile, idx) => (
+                  <EnrichedProfileCard
+                    key={idx}
+                    profile={profile}
+                    onClick={() => setSelectedEnrichedProfile(profile)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-3xl border border-slate-200 border-dashed">
+                <div className="bg-slate-50 p-6 rounded-full mb-6">
+                  <Sparkles size={48} className="opacity-20" />
+                </div>
+                <h3 className="text-xl font-bold uppercase tracking-tighter text-slate-900">No Analysis Data</h3>
+                <p className="text-sm font-medium mt-1 max-w-xs text-center">Go to "Talent Pools (Saved)" and click "Analyze with AI" to enrich profiles.</p>
+              </div>
+            )}
           </div>
         )}
-      </main>
+
+        <EnrichedProfileModal
+          isOpen={!!selectedEnrichedProfile}
+          onClose={() => setSelectedEnrichedProfile(null)}
+          profile={selectedEnrichedProfile}
+        />
+
+        {/* Placeholder Views */}
+        {
+          (activeView === 'employees' || activeView === 'payroll' || activeView === 'settings') && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-20 animate-in fade-in duration-500">
+              <div className="bg-indigo-50 p-12 rounded-[3rem] mb-8">
+                <Briefcase size={64} className="text-indigo-600" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Under Maintenance</h2>
+              <p className="text-slate-500 max-w-sm mt-2">This module is currently being optimized for the Zamzam Exchange HR infrastructure.</p>
+              <button onClick={() => setActiveView('dashboard')} className="mt-8 px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:scale-105 transition-all">
+                Back to Dashboard
+              </button>
+            </div>
+          )
+        }
+      </main >
 
       <ResumeModal
         isOpen={isResumeModalOpen}
@@ -507,7 +1038,7 @@ const App: React.FC = () => {
         offerText={currentOfferText}
         name={offerProfileName}
       />
-    </div>
+    </div >
   );
 };
 

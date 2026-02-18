@@ -1,15 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
-import { LinkedInProfile, CandidateInsight } from '../types';
+import { LinkedInProfile, CandidateInsight, SearchParams } from '../types';
 import { analyzeCandidate } from '../services/geminiService';
-import { Sparkles, CheckCircle2, AlertCircle, Copy, Send, Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertCircle, Copy, Send, Loader2, RefreshCw, AlertTriangle, Globe, UserCheck, Briefcase } from 'lucide-react';
 
 interface InsightsPanelProps {
   selectedProfile: LinkedInProfile | null;
   targetRole: string;
+  searchParams?: SearchParams;
 }
 
-const InsightsPanel: React.FC<InsightsPanelProps> = ({ selectedProfile, targetRole }) => {
+const InsightsPanel: React.FC<InsightsPanelProps> = ({ selectedProfile, targetRole, searchParams }) => {
   const [insight, setInsight] = useState<CandidateInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -29,7 +29,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ selectedProfile, targetRo
     setLoading(true);
     setError(null);
     try {
-      const result = await analyzeCandidate(selectedProfile, targetRole);
+      const result = await analyzeCandidate(selectedProfile, targetRole, searchParams);
       setInsight(result);
     } catch (err: any) {
       console.error(err);
@@ -86,7 +86,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ selectedProfile, targetRo
             <AlertCircle className="mx-auto text-amber-500 mb-2" size={24} />
             <p className="text-sm font-bold text-amber-800">{error}</p>
           </div>
-          <button 
+          <button
             onClick={handleAnalyze}
             className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline"
           >
@@ -95,20 +95,71 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ selectedProfile, targetRo
         </div>
       ) : insight ? (
         <>
-          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-semibold text-indigo-700">Fit Score</span>
-              <span className={`text-lg font-bold ${insight.score > 75 ? 'text-green-600' : 'text-amber-600'}`}>
-                {insight.score}%
-              </span>
+          {/* Match Score & Availability */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Match Score</span>
+                <span className={`text-lg font-black ${insight.matchScore > 80 ? 'text-green-600' : insight.matchScore > 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                  {insight.matchScore}%
+                </span>
+              </div>
+              <div className="w-full bg-indigo-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-1000 ${insight.matchScore > 80 ? 'bg-green-500' : insight.matchScore > 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                  style={{ width: `${insight.matchScore}%` }}
+                ></div>
+              </div>
             </div>
-            <div className="w-full bg-indigo-200 rounded-full h-2">
-              <div 
-                className={`h-2 rounded-full transition-all duration-1000 ${insight.score > 75 ? 'bg-green-500' : 'bg-amber-500'}`} 
-                style={{ width: `${insight.score}%` }}
-              ></div>
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Availability</span>
+                <span className={`text-lg font-black ${insight.availabilityScore > 70 ? 'text-green-600' : 'text-slate-600'}`}>
+                  {insight.availabilityScore}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-1000 ${insight.availabilityScore > 70 ? 'bg-green-500' : 'bg-slate-400'}`}
+                  style={{ width: `${insight.availabilityScore}%` }}
+                ></div>
+              </div>
             </div>
           </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center gap-3">
+              <div className="bg-white p-2 rounded-md shadow-sm text-indigo-600"><Globe size={16} /></div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Flexibility</p>
+                <p className="text-sm font-bold text-slate-800">{insight.geographicFlexibility || 'N/A'}</p>
+              </div>
+            </div>
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center gap-3">
+              <div className="bg-white p-2 rounded-md shadow-sm text-indigo-600"><Briefcase size={16} /></div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Est. Level</p>
+                <p className="text-sm font-bold text-slate-800">{insight.currentLevel || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Red Flags */}
+          {insight.redFlags && insight.redFlags.length > 0 && (
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <h3 className="font-bold text-red-800 flex items-center gap-2 text-xs uppercase tracking-wider mb-2">
+                <AlertTriangle size={14} /> Potential Concerns
+              </h3>
+              <ul className="space-y-1">
+                {insight.redFlags.map((flag, i) => (
+                  <li key={i} className="text-xs text-red-700 pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-red-400">
+                    {flag}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="space-y-3">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2 text-sm">
@@ -141,7 +192,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({ selectedProfile, targetRo
               <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
                 <Send size={16} className="text-indigo-500" /> Outreach Strategy
               </h3>
-              <button 
+              <button
                 onClick={handleCopy}
                 className="text-xs flex items-center gap-1 text-slate-500 hover:text-indigo-600 bg-slate-50 px-2 py-1 rounded border border-slate-200"
               >

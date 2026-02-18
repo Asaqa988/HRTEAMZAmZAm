@@ -10,8 +10,15 @@ const CACHE_KEYS = {
 const getCache = (key: string) => {
   try {
     const data = localStorage.getItem(key);
+    // Safety check: if data is a simple string that's not JSON (doesn't start with { or [), return empty
+    if (data && !data.startsWith('{') && !data.startsWith('[')) {
+      localStorage.removeItem(key);
+      return {};
+    }
     return data ? JSON.parse(data) : {};
   } catch (e) {
+    console.warn(`Corrupted cache for ${key}, clearing it.`);
+    localStorage.removeItem(key);
     return {};
   }
 };
@@ -34,27 +41,49 @@ const handleAIError = (error: any, fallbackMessage: string) => {
   return `${fallbackMessage}: ${error.message || JSON.stringify(error)}`;
 };
 
-export const analyzeCandidate = async (profile: LinkedInProfile, roleDescription: string): Promise<CandidateInsight> => {
-  const cacheKey = `${profile.id}-${roleDescription}`;
+export const analyzeCandidate = async (profile: LinkedInProfile, roleDescription: string, advancedParams?: any): Promise<CandidateInsight> => {
+  const cacheKey = `${profile.id}-${roleDescription}-${JSON.stringify(advancedParams || {})}`;
   const analysisCache = getCache(CACHE_KEYS.ANALYSIS);
   if (analysisCache[cacheKey]) return analysisCache[cacheKey];
 
   const openai = getOpenAIClient();
-  const prompt = `Analyze this LinkedIn profile for the following target role: "${roleDescription}".
+
+  const advancedContext = advancedParams ? `
+  Advanced Requirements:
+  - Target Level: ${advancedParams.positionLevel || 'Any'}
+  - Industry: ${advancedParams.targetIndustry || 'Any'}
+  - Core Function: ${advancedParams.coreFunction || 'Any'}
+  - Specialization: ${advancedParams.subSpecialization || 'Any'}
+  - Skills (Mandatory): ${advancedParams.skills?.mandatory?.join(', ') || 'None'}
+  - Skills (Preferred): ${advancedParams.skills?.preferred?.join(', ') || 'None'}
+  - Target Companies: ${advancedParams.companyMapping?.target?.join(', ') || 'None'}
+  - Excluded Companies: ${advancedParams.companyMapping?.excluded?.join(', ') || 'None'}
+  ` : '';
+
+  const prompt = `Analyze this LinkedIn profile for the role: "${roleDescription}".
+  ${advancedContext}
   
   Profile Details:
   Name: ${profile.fullName}
   Current Title: ${profile.title}
   Location: ${profile.location}
   Description: ${profile.description || "N/A"}
+  Experience: ${JSON.stringify(profile.experienceHistory)}
+  Education: ${JSON.stringify(profile.educationHistory)}
   Skills: ${profile.skills?.join(", ") || "N/A"}
   
-  Provide a JSON response with:
-  1. score (0-100 number)
-  2. pros (array of strings)
-  3. cons (array of strings)
-  4. outreachDraft (string)
-  5. summary (string)`;
+  Perform a deep holistic analysis and return a JSON response with:
+  1. matchScore (0-100): Strict evaluation against requirements.
+  2. availabilityScore (0-100): Estimate based on tenure (long tenure = lower score), lack of recent promo, etc.
+  3. redFlags (string[]): Detect gaps (>6 months), title inflation, short tenures (<1 yr), regressive moves.
+  4. pros (string[]): Key strengths aligned with requirements.
+  5. cons (string[]): Missing skills or experience gaps.
+  6. geographicFlexibility (string): "High" if worked in multiple countries, else "Low".
+  7. currentLevel (string): Estimated level (Manager, Director, VP, etc.).
+  8. outreachDraft (string): Personalized cold outreach email.
+  9. summary (string): Professional executive summary.
+  
+  Be critical. High match scores should be reserved for perfect fits.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -64,6 +93,9 @@ export const analyzeCandidate = async (profile: LinkedInProfile, roleDescription
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}") as CandidateInsight;
+    // Backwards compatibility for 'score'
+    result.score = result.matchScore;
+
     analysisCache[cacheKey] = result;
     setCache(CACHE_KEYS.ANALYSIS, analysisCache);
     return result;

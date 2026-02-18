@@ -56,12 +56,39 @@ export interface SearchParams {
   yearsOfExperience: string;
   limit: number;
   actorId: string;
+  // New Advanced Filters
+  positionLevel?: 'Manager' | 'Head' | 'Director' | 'VP' | 'C-Level';
+  targetIndustry?: string;
+  keywordsIncludes?: string;
+  keywordsExcludes?: string;
+  education?: string;
+  currentEmployer?: string;
+  internationalExperience?: boolean;
+  coreFunction?: string;
+  subSpecialization?: string;
+  skills?: {
+    mandatory?: string[];
+    preferred?: string[];
+    niceToHave?: string[];
+  };
+  certifications?: string[];
+  companyMapping?: {
+    target?: string[];
+    competitor?: string[];
+    excluded?: string[];
+  };
+  geographicFlexibility?: boolean;
 }
 
 export interface CandidateInsight {
-  score: number;
+  score: number; // 0-100
+  matchScore: number; // New rigorous match score
+  availabilityScore: number; // 0-100
+  redFlags: string[];
   pros: string[];
   cons: string[];
   outreachDraft: string;
   summary: string;
+  geographicFlexibility?: string;
+  currentLevel?: string;
 }
