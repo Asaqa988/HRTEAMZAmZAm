@@ -31,11 +31,20 @@ app.use('/apify-api', createProxyMiddleware({
 // Serve static files from the 'dist' directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', message: 'Express server is active and proxy is ready' });
+});
+
 // Handle SPA routing: return index.html for all non-API routes
 app.get('*', (req, res) => {
+    console.log(`[Server] Serving SPA for: ${req.url}`);
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log('=========================================');
+    console.log(`🚀 Zamzam Server started on port ${PORT}`);
+    console.log(`🔗 Health Check: http://localhost:${PORT}/health`);
+    console.log('=========================================');
 });
