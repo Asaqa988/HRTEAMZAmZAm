@@ -115,12 +115,24 @@ export const startScrapingRun = async (params: SearchParams): Promise<string> =>
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Failed to start Apify run: ${errorData.data?.message || response.statusText}`);
+    const text = await response.text();
+    console.error('[Apify] Non-OK response startScrapingRun:', text);
+    try {
+      const errorData = JSON.parse(text);
+      throw new Error(`Failed to start Apify run: ${errorData.data?.message || response.statusText}`);
+    } catch (e) {
+      throw new Error(`Failed to start Apify run (${response.status}): ${text.slice(0, 100)}...`);
+    }
   }
 
-  const data = await response.json();
-  return data.data.id;
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    return data.data.id;
+  } catch (e) {
+    console.error('[Apify] JSON Parse Error startScrapingRun:', text);
+    throw new Error(`Invalid JSON response from server: ${text.slice(0, 100)}...`);
+  }
 };
 
 export const pollRunStatus = async (runId: string): Promise<string> => {
@@ -136,7 +148,14 @@ export const getRunResults = async (runId: string, targetLocation: string): Prom
 
   const runResponse = await fetch(`/apify-api/v2/acts/${GOOGLE_ACTOR_ID}/runs/${runId}?token=${APIFY_API_TOKEN}`);
   if (!runResponse.ok) throw new Error("Failed to retrieve run details.");
-  const runData = await runResponse.json();
+  const runText = await runResponse.text();
+  let runData;
+  try {
+    runData = JSON.parse(runText);
+  } catch (e) {
+    console.error('[Apify] JSON Parse Error getRunResults (run):', runText);
+    throw new Error(`Invalid JSON for run details: ${runText.slice(0, 100)}...`);
+  }
 
   if (runData.data.status === 'FAILED' || runData.data.status === 'ABORTED') {
     throw new Error(`Apify Run finished with status: ${runData.data.status}`);
@@ -146,7 +165,14 @@ export const getRunResults = async (runId: string, targetLocation: string): Prom
   const response = await fetch(`/apify-api/v2/datasets/${datasetId}/items?token=${APIFY_API_TOKEN}`);
   if (!response.ok) throw new Error("Failed to fetch results.");
 
-  const rawData = await response.json();
+  const datasetText = await response.text();
+  let rawData;
+  try {
+    rawData = JSON.parse(datasetText);
+  } catch (e) {
+    console.error('[Apify] JSON Parse Error getRunResults (dataset):', datasetText);
+    throw new Error(`Invalid JSON for dataset items: ${datasetText.slice(0, 100)}...`);
+  }
   const mappedProfiles: LinkedInProfile[] = [];
 
   rawData.forEach((page: any) => {

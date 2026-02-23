@@ -16,9 +16,15 @@ app.use('/apify-api', createProxyMiddleware({
     pathRewrite: {
         '^/apify-api': '',
     },
+    onProxyReq: (proxyReq, req, res) => {
+        console.log(`[Proxy] Forwarding ${req.method} ${req.url} to Apify`);
+    },
     onProxyRes: (proxyRes, req, res) => {
-        // Ensure no CORS issues in production if needed
+        console.log(`[Proxy] Received ${proxyRes.statusCode} from Apify for ${req.url}`);
         proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+    },
+    onError: (err, req, res) => {
+        console.error('[Proxy] Error:', err);
     }
 }));
 
