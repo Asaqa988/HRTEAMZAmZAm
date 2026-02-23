@@ -78,6 +78,53 @@ export interface SearchParams {
     excluded?: string[];
   };
   geographicFlexibility?: boolean;
+  excludeSeniors?: boolean;
+  smartExpansion?: boolean;
+}
+
+export interface EnrichedProfile {
+  linkedinUrl: string;
+  fullName: string;
+  headline: string;
+  connections: number;
+  followers: number;
+  email: string | null;
+  mobileNumber: string | null;
+  about: string;
+  location: string;
+  skills: { title: string }[];
+  experiences: {
+    title: string;
+    companyName: string;
+    jobLocation: string | null;
+    jobDescription: string | null;
+    jobStartedOn: string | null;
+    jobEndedOn: string | null;
+    jobStillWorking: boolean;
+    logo?: string | null;
+    companyIndustry?: string | null;
+    companySize?: string | null;
+  }[];
+  educations: {
+    title: string;
+    subtitle: string;
+    period: { startedOn: { year: number }; endedOn: { year: number } } | null;
+  }[];
+  languages: { name: string; proficiency: string }[];
+  profilePic: string | null;
+}
+
+export interface SavedSearch {
+  id: string;
+  title: string;
+  profiles: LinkedInProfile[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
 }
 
 export interface CandidateInsight {

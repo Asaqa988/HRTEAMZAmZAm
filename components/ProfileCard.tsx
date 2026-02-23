@@ -1,28 +1,29 @@
 
 import React from 'react';
 import { LinkedInProfile } from '../types';
-import { ExternalLink, MapPin, Briefcase, Star, FileText, Send } from 'lucide-react';
+import { ExternalLink, MapPin, Briefcase, Star, FileText, Send, Heart } from 'lucide-react';
 
 interface ProfileCardProps {
   profile: LinkedInProfile;
   isSelected: boolean;
+  isLiked?: boolean;
   onSelect: (profile: LinkedInProfile) => void;
   onFetchCV: (profile: LinkedInProfile) => void;
   onSendOffer: (profile: LinkedInProfile) => void;
+  onToggleLike?: (profile: LinkedInProfile) => void;
 }
 
-const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect, onFetchCV, onSendOffer }) => {
+const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, isLiked, onSelect, onFetchCV, onSendOffer, onToggleLike }) => {
   return (
-    <div 
+    <div
       onClick={() => onSelect(profile)}
-      className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-lg ${
-        isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white'
-      }`}
+      className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-lg ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white'
+        }`}
     >
       <div className="flex gap-4">
-        <img 
-          src={profile.profilePicUrl} 
-          alt={profile.fullName} 
+        <img
+          src={profile.profilePicUrl}
+          alt={profile.fullName}
           className="w-16 h-16 rounded-full object-cover border border-slate-200 shadow-sm"
           onError={(e) => {
             (e.target as HTMLImageElement).src = "https://picsum.photos/200";
@@ -30,9 +31,22 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect
         />
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start">
-            <h3 className="font-bold text-slate-900 truncate">{profile.fullName}</h3>
+            <div className="flex items-center gap-2 truncate">
+              <h3 className="font-bold text-slate-900 truncate">{profile.fullName}</h3>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleLike?.(profile);
+                }}
+                className={`p-1 rounded-full transition-colors ${isLiked ? 'text-red-500 hover:bg-red-50' : 'text-slate-300 hover:text-red-400 hover:bg-slate-50'
+                  }`}
+                title={isLiked ? "Unlike Candidate" : "Like Candidate"}
+              >
+                <Heart size={16} fill={isLiked ? "currentColor" : "none"} />
+              </button>
+            </div>
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onFetchCV(profile);
@@ -42,9 +56,9 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect
               >
                 <FileText size={16} />
               </button>
-              <a 
-                href={profile.profileUrl} 
-                target="_blank" 
+              <a
+                href={profile.profileUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="text-slate-400 hover:text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-lg transition-colors"
                 onClick={(e) => e.stopPropagation()}
@@ -54,7 +68,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect
             </div>
           </div>
           <p className="text-sm text-slate-600 font-medium truncate">{profile.title}</p>
-          
+
           <div className="mt-2 flex flex-wrap gap-y-1 gap-x-3 text-xs text-slate-500">
             <span className="flex items-center gap-1 font-medium">
               <MapPin size={12} className="text-slate-400" /> {profile.location}
@@ -63,14 +77,14 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect
               <Briefcase size={12} className="text-slate-400" /> {profile.company}
             </span>
             {profile.yearsOfExperience !== undefined && (
-               <span className="flex items-center gap-1 font-bold">
+              <span className="flex items-center gap-1 font-bold">
                 <Star size={12} className="text-amber-500 fill-amber-500" /> {profile.yearsOfExperience}y Exp
               </span>
             )}
           </div>
         </div>
       </div>
-      
+
       <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100">
         <div className="flex flex-wrap gap-1">
           {profile.skills && profile.skills.length > 0 && profile.skills.slice(0, 2).map((skill, idx) => (
@@ -80,8 +94,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect
           ))}
         </div>
         <div className="flex gap-2">
-          <button 
-             onClick={(e) => {
+          <button
+            onClick={(e) => {
               e.stopPropagation();
               onFetchCV(profile);
             }}
@@ -89,8 +103,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isSelected, onSelect
           >
             <FileText size={12} /> CV
           </button>
-          <button 
-             onClick={(e) => {
+          <button
+            onClick={(e) => {
               e.stopPropagation();
               onSendOffer(profile);
             }}

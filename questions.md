@@ -1,0 +1,123 @@
+# 100 Questions for Zamzam Brain AI Chatbot
+
+This list of questions is designed to help you get the most out of your AI-powered recruitment assistant. The questions are categorized by activity type.
+
+## 📊 Talent Pool Analysis
+1. "Give me a summary of all my talent pools."
+2. "Which pool has the highest average years of experience?"
+3. "How many candidates do I have in total across all pools?"
+4. "Which pool was most recently updated?"
+5. "List the names of all pools I have created."
+6. "How many candidates are in the 'Java Developers' pool?"
+7. "Identify any overlap: Are there candidates present in more than one pool?"
+8. "Briefly describe the focus of each of my pools."
+9. "Which pool has the most candidates from Amman?"
+10. "Tell me about the profiles in my 'Executive' pool."
+
+## 🏅 Candidate Ranking & Comparison
+11. "Rank all candidates in the 'Marketing' pool by fit for a Senior Manager role."
+12. "Who are the top 3 candidates for a Lead Developer position?"
+13. "Compare Candidate A and Candidate B from the 'Sales' pool."
+14. "Who in my pools is most qualified for a Technical Architect role?"
+15. "Can you rank these candidates based on their leadership experience?"
+16. "Which candidate in the 'Analyst' pool has the strongest educational background?"
+17. "Find me the best fit for an entry-level HR role."
+18. "Who has the most diverse skill set across all my pools?"
+19. "Rank candidates in 'Pool X' specifically for cultural fit in a startup environment."
+20. "Identify the 'hidden gems': Highly skilled candidates with slightly less experience."
+
+## 🔍 Specific Skill & Experience Search
+21. "Who has experience with React and Node.js?"
+22. "Find candidates who have worked at Zain or Orange."
+23. "List everyone with 'Project Management' listed as a skill."
+24. "Who has more than 10 years of experience in the banking sector?"
+25. "Identify candidates who have been in their current role for over 5 years."
+26. "Does anyone have a background in Fintech?"
+27. "Find candidates with experience in international marketing."
+28. "Who in my 'Designer' pool knows Figma and Adobe XD?"
+29. "List candidates who have 'MBA' in their education history."
+30. "Search for anyone with experience in the public sector."
+
+## 💡 AI Insights & Enriched Data
+31. "Summarize the 'About' section for Nour Al-Deen."
+32. "What are the core strengths of Layla Al-Sharif based on her profile?"
+33. "Show me the skills listed for Omar Khalil."
+34. "Based on the enriched data, who has the most impressive career progression?"
+35. "Are there any red flags I should be aware of for the candidates in 'Pool B'?"
+36. "What does the AI say about the 'availability' of high-performing candidates?"
+37. "Summarize the most recent experience for all candidates in the 'Finance' pool."
+38. "Who are the most 'enriched' candidates in my list?"
+39. "Give me an executive summary for the 'Senior Engineering' pool."
+40. "Identify candidates whose profiles mention 'agile methodology'."
+
+## 📧 Outreach & Communication
+41. "Draft a personalized email to Layla Al-Sharif about a Senior HR role."
+42. "What's a good ice-breaker for a message to Omar Khalil?"
+43. "Generate a reach-out message for a Technical Lead role for the top-ranked candidate."
+44. "Write a follow-up email for a candidate who hasn't responded."
+45. "Create a LinkedIn InMail template for the 'Future Leads' pool."
+46. "How should I approach a candidate with a very long tenure at their current company?"
+47. "Draft a rejection email that is polite and provides constructive feedback."
+48. "Generate a 'congratulations on the new role' message for a former candidate."
+49. "Create a brief pitch about Zamzam Exchange to send to potential recruits."
+50. "Write a message inviting a candidate to an initial screening call."
+
+## 📅 Interview Preparation
+51. "Generate 5 technical questions for a Java Developer interview."
+52. "What behavioral questions should I ask someone applying for a Manager role?"
+53. "Create an interview rubric for evaluating 'Problem Solving' skills."
+54. "What should I look for in the answers to questions about 'Conflict Resolution'?"
+55. "Give me a list of questions to assess a candidate's 'Leadership Potential'."
+56. "Draft a set of questions for a 15-minute culture-fit screening."
+57. "What are some good questions to ask about a candidate's experience at Zain?"
+58. "Create a scenario-based question for a Customer Service role."
+59. "Generate 3 advanced questions about AWS architecture."
+60. "Suggest questions for a 'Final Round' interview with the CEO."
+
+## 📈 Strategy & Market Trends
+61. "What is the current demand for HR Managers in Jordan?"
+62. "What are the top 5 skills for 'Cloud Architects' in 2024?"
+63. "How does the salary for a Junior Developer in Amman compare to regional averages?"
+64. "What emerging technologies should I be looking for in 'DevOps' candidates?"
+65. "Summarize market trends for 'Digital Marketing' roles in the Middle East."
+66. "Which industries in Jordan are currently hiring the most tech talent?"
+67. "What are the most common job title variations for 'Data Scientists'?"
+68. "Suggest a sourcing strategy for finding niche 'Cybersecurity' specialists."
+69. "What skills are becoming obsolete in the 'Project Management' field?"
+70. "Predict the most in-demand HR roles for the next 2 years."
+
+## 🧹 Data Management & Cleanup
+71. "Identify profiles with missing location data."
+72. "Which candidates do not have any listed experience history?"
+73. "Find profiles that haven't been enriched by AI yet."
+74. "List candidates with 'Unknown' in their title."
+75. "Which pool has the most 'incomplete' profiles?"
+76. "Suggest names for a new pool focused on 'Local Talent'."
+77. "How can I better organize my 'Sales' candidates?"
+78. "Are there any duplicate names across different pools?"
+79. "Identify candidates who haven't updated their LinkedIn in over a year."
+80. "Find candidates with placeholder profile pictures."
+
+## 🏢 Company Specific
+81. "Which candidates in my pools currently work at Zamzam Exchange competitors?"
+82. "Find people who have previously worked at Zamzam Exchange."
+83. "List candidates who are currently employed by the 'Big Four' accounting firms."
+84. "Who has experience working in a multi-national corporate environment?"
+85. "Identify candidates with experience in 'Islamic Banking'."
+86. "Find talent with a background in 'Currency Exchange' or 'Remittances'."
+87. "Who is currently working at a startup in Amman?"
+88. "List candidates who have transitioned from 'Retail' to 'Corporate' roles."
+89. "Find candidates with experience in 'Compliance' and 'AML'."
+90. "Who has a background in 'Customer Experience Strategy'?"
+
+## 🎭 Role-Play & Creative
+91. "Act as a demanding hiring manager and critique the 'Engineering' pool."
+92. "Tell me a joke about a recruiter and a developer."
+93. "Write a short poem about the perfect candidate."
+94. "How would you describe the 'Zamzam Brain' to a new HR trainee?"
+95. "If my 'Talent Pool A' was a sports team, what would be its strengths?"
+96. "Give me a motivational quote for a busy recruitment day."
+97. "Write a 2-sentence 'elevator pitch' for a Senior Developer role."
+98. "How would you explain 'Technical Debt' to a non-technical recruiter?"
+99. "What would be the first thing you'd look for in a 'Unicorn' candidate?"
+100. "Give me one tip to improve my candidate search today."

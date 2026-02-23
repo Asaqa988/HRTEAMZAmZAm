@@ -241,3 +241,34 @@ export const measureKPIPerformance = async (fileBase64: string, mimeType: string
     throw new Error(handleAIError(error, "KPI Measurement failed"));
   }
 };
+export const chatWithAI = async (messages: { role: 'user' | 'assistant' | 'system', content: string }[], talentContext: string): Promise<string> => {
+  const openai = getOpenAIClient();
+
+  const systemPrompt = `You are the "Zamzam Brain", an advanced AI recruitment assistant for Zamzam Exchange.
+  You have access to the user's talent pools and enriched LinkedIn profiles.
+  
+  CURRENT TALENT DATA CONTEXT:
+  ${talentContext}
+  
+  INSTRUCTIONS:
+  1. Use the provided context to answer questions about candidates.
+  2. If the user asks for a LinkedIn link or profile URL, ALWAYS provide the URL from the context.
+  3. If asked to rank candidates, provide a clear, justified ranking based on experience, skills, and fit.
+  4. Be professional, concise, and helpful.
+  5. If the information isn't in the context, clearly state that you don't have that specific data but offer to analyze what is available.
+  6. Format your responses in clean Markdown.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages
+      ]
+    });
+
+    return response.choices[0].message.content || "I couldn't process that request.";
+  } catch (error) {
+    throw new Error(handleAIError(error, "Chat failed"));
+  }
+};
