@@ -28,23 +28,28 @@ app.use('/apify-api', createProxyMiddleware({
     }
 }));
 
+// Health check endpoint (placed BEFORE static/SPA)
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'OK',
+        message: 'Express server is active and proxy is ready',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Serve static files from the 'dist' directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', message: 'Express server is active and proxy is ready' });
-});
-
 // Handle SPA routing: return index.html for all non-API routes
-app.get('*', (req, res) => {
+// Using a robust catch-all middleware instead of problematic '*' route
+app.use((req, res) => {
     console.log(`[Server] Serving SPA for: ${req.url}`);
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log('=========================================');
     console.log(`🚀 Zamzam Server started on port ${PORT}`);
-    console.log(`🔗 Health Check: http://localhost:${PORT}/health`);
+    console.log(`🔗 Health Check: /health`);
     console.log('=========================================');
 });
