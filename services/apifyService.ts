@@ -139,8 +139,14 @@ export const pollRunStatus = async (runId: string): Promise<string> => {
   if (!APIFY_API_TOKEN) throw new Error("Apify API Token is missing.");
   const response = await fetch(`/apify-api/v2/acts/${GOOGLE_ACTOR_ID}/runs/${runId}?token=${APIFY_API_TOKEN}`);
   if (!response.ok) return 'UNKNOWN';
-  const data = await response.json();
-  return data.data.status;
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    return data.data.status;
+  } catch (e) {
+    console.error('[Apify] JSON Parse Error pollRunStatus:', text);
+    return 'UNKNOWN';
+  }
 };
 
 export const getRunResults = async (runId: string, targetLocation: string): Promise<ScrapeResponse> => {
@@ -236,22 +242,46 @@ const processBatch = async (batchUrls: string[]) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    if (!runResponse.ok) return [];
-    const runData = await runResponse.json();
+    if (!runResponse.ok) {
+      const errText = await runResponse.text();
+      console.error('[Apify] processBatch run start error:', errText);
+      return [];
+    }
+    const runText = await runResponse.text();
+    let runData;
+    try {
+      runData = JSON.parse(runText);
+    } catch (e) {
+      console.error('[Apify] JSON Parse Error processBatch (start):', runText);
+      return [];
+    }
     const runId = runData.data.id;
 
     let status = 'RUNNING';
     while (status === 'RUNNING' || status === 'READY') {
       await new Promise(r => setTimeout(r, 3000));
       const sRes = await fetch(`/apify-api/v2/acts/${ENRICHMENT_ACTOR_ID}/runs/${runId}?token=${APIFY_API_TOKEN}`);
-      const sData = await sRes.json();
-      status = sData.data.status;
+      const sText = await sRes.text();
+      try {
+        const sData = JSON.parse(sText);
+        status = sData.data.status;
+      } catch (e) {
+        console.error('[Apify] JSON Parse Error processBatch (status):', sText);
+        status = 'UNKNOWN';
+      }
     }
 
     if (status !== 'SUCCEEDED') return [];
     const dId = runData.data.defaultDatasetId;
     const dRes = await fetch(`/apify-api/v2/datasets/${dId}/items?token=${APIFY_API_TOKEN}`);
-    const items = await dRes.json();
+    const dText = await dRes.text();
+    let items;
+    try {
+      items = JSON.parse(dText);
+    } catch (e) {
+      console.error('[Apify] JSON Parse Error processBatch (items):', dText);
+      return [];
+    }
 
     return items.map((item: any) => ({
       ...item,
